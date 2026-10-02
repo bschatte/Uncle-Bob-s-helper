@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- No zooming: stops pinches and double-taps from enlarging the board by accident. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Talk Board</title>
+  <meta name="description" content="Eye-gaze communication board">
+
+  <!-- Home screen app settings (iPad) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Talk Board">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <meta name="theme-color" content="#000000">
+
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+  <!-- ===================== MAIN BOARD ===================== -->
+  <div id="app" class="board-screen">
+    <header id="topbar">
+      <!-- The word that was just said. Tap it to say it again. -->
+      <button id="banner" class="banner" aria-live="polite" title="Tap to repeat">
+        <span id="banner-pic" class="banner-pic"></span>
+        <span id="banner-text" class="banner-text hint">Look at a word</span>
+      </button>
+
+      <div class="corner-tools">
+        <!-- Camera status. Tap to recalibrate (tap only, never by gaze). -->
+        <button id="camera-chip" class="camera-chip" hidden></button>
+        <!-- Caregiver mode: press and HOLD for 2 seconds. -->
+        <button id="gear" class="gear" aria-label="Caregiver settings (press and hold)">
+          <svg class="gear-ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="45" class="gear-ring-fill"></circle>
+          </svg>
+          <span aria-hidden="true">⚙️</span>
+        </button>
+      </div>
+    </header>
+
+    <nav id="category-bar" class="category-bar" aria-label="Word groups"></nav>
+
+    <main id="board" class="board">
+      <button id="prev-page" class="tile nav-tile" data-dwell data-repeat-guard="400" hidden>
+        <span class="tile-pic">◀</span><span class="tile-word">Back</span>
+      </button>
+      <div id="grid" class="grid"></div>
+      <button id="next-page" class="tile nav-tile" data-dwell data-repeat-guard="400" hidden>
+        <span class="tile-pic">▶</span><span class="tile-word">Next</span>
+        <span id="page-label" class="page-label"></span>
+      </button>
+    </main>
+  </div>
+
+  <!-- Shared dwell "fill ring" (moved over whatever is being looked at). -->
+  <div id="dwell-ring" class="dwell-ring" hidden aria-hidden="true">
+    <svg viewBox="0 0 100 100">
+      <circle class="ring-bg" cx="50" cy="50" r="42"></circle>
+      <circle class="ring-fill" cx="50" cy="50" r="42"></circle>
+    </svg>
+  </div>
+
+  <!-- Where the camera thinks the person is looking. -->
+  <div id="gaze-dot" class="gaze-dot" hidden aria-hidden="true"></div>
+
+  <!-- Camera video stays hidden. It is processed on this iPad only. -->
+  <video id="camera-video" class="camera-video" playsinline muted autoplay></video>
+
+  <!-- Messages such as "camera is blocked" -->
+  <div id="notice" class="notice" role="status" hidden>
+    <div id="notice-text"></div>
+    <button id="notice-close" class="btn">OK</button>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <!-- ===================== START SCREEN ===================== -->
+  <!-- iPad only allows speech after a first tap, so we start with one big button. -->
+  <section id="start-screen" class="overlay start-screen">
+    <img src="icons/icon-192.png" alt="" class="start-icon">
+    <h1>Talk Board</h1>
+    <button id="start-button" class="btn btn-huge">Tap to start</button>
+  </section>
+
+  <!-- ===================== TYPE TO SPEAK ===================== -->
+  <section id="type-screen" class="overlay type-screen" hidden>
+    <div id="type-text" class="type-text" aria-live="polite"></div>
+    <div class="type-actions">
+      <button class="key action-key speak-key" data-dwell data-type-action="speak">🔊 Speak</button>
+      <button class="key action-key" data-dwell data-type-action="clear">✖ Clear</button>
+      <button class="key action-key" data-dwell data-type-action="recent">🕘 Recent</button>
+      <button class="key action-key" data-dwell data-type-action="pin">⭐ Save as tile</button>
+      <button class="key action-key close-key" data-dwell data-type-action="close">⬅ Board</button>
+    </div>
+    <div id="keyboard" class="keyboard"></div>
+
+    <div id="recent-panel" class="recent-panel" hidden>
+      <div class="recent-head">
+        <h2>Recent phrases</h2>
+        <button class="key action-key" data-dwell data-type-action="recent-close">✖ Close</button>
+      </div>
+      <div id="recent-list" class="recent-list scrollable"></div>
+    </div>
+  </section>
+
+  <!-- ===================== CAMERA PERMISSION EXPLANATION ===================== -->
+  <section id="camera-consent" class="overlay dialog-screen" hidden>
+    <div class="dialog-card">
+      <h2>👁️ Use the camera to follow the eyes?</h2>
+      <p>Talk Board can use the iPad's front camera to see where you are looking, so words can be picked with the eyes alone.</p>
+      <ul>
+        <li><strong>The video stays on this iPad.</strong> It is never recorded, saved, or sent anywhere.</li>
+        <li>The camera only runs while Talk Board is open.</li>
+        <li>You can turn it off at any time in caregiver settings.</li>
+      </ul>
+      <p>On the next screen the iPad will ask for permission. Choose <strong>Allow</strong>.</p>
+      <div class="dialog-buttons">
+        <button id="consent-no" class="btn">Not now</button>
+        <button id="consent-yes" class="btn btn-primary">Turn on camera</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CALIBRATION ===================== -->
+  <section id="calibration" class="overlay calibration" hidden>
+    <div class="calib-intro">
+      <h2>Eye tracking setup</h2>
+      <video id="calib-preview" class="calib-preview" playsinline muted autoplay></video>
+      <ol>
+        <li>Make sure the whole face is in the picture, with good light on it.</li>
+        <li>Keep the iPad still, about an arm's length away.</li>
+        <li>Look at 5 dots, one at a time. Keep the head still and move only the eyes.</li>
+      </ol>
+      <div class="dialog-buttons">
+        <button id="calib-cancel" class="btn">Cancel</button>
+        <button id="calib-start" class="btn btn-primary">Start</button>
+      </div>
+    </div>
+    <div class="calib-run" hidden>
+      <div class="calib-dot" hidden></div>
+      <div class="calib-msg">Look at the dot</div>
+    </div>
+    <div class="calib-result" hidden>
+      <p class="calib-result-text"></p>
+      <div class="dialog-buttons">
+        <button id="calib-again" class="btn">Try again</button>
+        <button id="calib-done" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CAREGIVER MODE ===================== -->
+  <section id="editor" class="overlay editor" hidden>
+    <header class="editor-head">
+      <h2>Caregiver settings</h2>
+      <button id="editor-close" class="btn btn-primary">Done</button>
+    </header>
+    <nav class="editor-tabs" role="tablist">
+      <button class="tab" data-tab="words" aria-selected="true">Words</button>
+      <button class="tab" data-tab="categories">Groups</button>
+      <button class="tab" data-tab="settings">Settings</button>
+      <button class="tab" data-tab="backup">Backup</button>
+    </nav>
+    <div id="editor-body" class="editor-body scrollable"></div>
+  </section>
+
+  <!-- Add / edit a word -->
+  <dialog id="word-dialog" class="form-dialog">
+    <form id="word-form" method="dialog">
+      <h2 id="word-dialog-title">Add a word</h2>
+      <label>Word on the tile
+        <input name="text" required maxlength="40" autocomplete="off" placeholder="e.g. Blanket">
+      </label>
+      <label>Say this instead (optional)
+        <input name="say" maxlength="200" autocomplete="off" placeholder="e.g. I need a blanket please">
+      </label>
+      <label>Group
+        <select name="categoryId"></select>
+      </label>
+      <label>Emoji (optional)
+        <input name="emoji" maxlength="16" autocomplete="off" placeholder="Tap one below or type one">
+      </label>
+      <div id="emoji-picker" class="emoji-picker"></div>
+      <div class="photo-row">
+        <div id="photo-preview" class="photo-preview"></div>
+        <label class="btn file-btn">📷 Add photo
+          <input id="photo-input" type="file" accept="image/*" hidden>
+        </label>
+        <button type="button" id="photo-remove" class="btn" hidden>Remove photo</button>
+      </div>
+      <div class="dialog-buttons">
+        <button type="button" id="word-cancel" class="btn">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Add / edit a group -->
+  <dialog id="cat-dialog" class="form-dialog">
+    <form id="cat-form" method="dialog">
+      <h2 id="cat-dialog-title">New group</h2>
+      <label>Group name
+        <input name="name" required maxlength="24" autocomplete="off" placeholder="e.g. Food">
+      </label>
+      <label>Emoji (optional)
+        <input name="emoji" maxlength="16" autocomplete="off">
+      </label>
+      <label>Color
+        <select name="color">
+          <option value="#1f6fd1">Blue</option>
+          <option value="#1a8a3a">Green</option>
+          <option value="#8a3ab9">Purple</option>
+          <option value="#d1452f">Red</option>
+          <option value="#d4a000">Gold</option>
+          <option value="#d1661f">Orange</option>
+          <option value="#0e8c8c">Teal</option>
+          <option value="#555555">Gray</option>
+        </select>
+      </label>
+      <div class="dialog-buttons">
+        <button type="button" id="cat-cancel" class="btn">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

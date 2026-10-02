@@ -1,0 +1,3 @@
+MediaPipe Tasks Vision 1.0.1 (Apache-2.0), from npm @mediapipe/tasks-vision.
+face_landmarker.task (float16/1) from storage.googleapis.com/mediapipe-models.
+Vendored so camera tracking works offline and does not depend on a CDN.
